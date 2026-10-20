@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <script>
+      (function() {
+        try {
+          var _f = window.fetch;
+          Object.defineProperty(window, 'fetch', {
+            get: function() { return _f; },
+            set: function(fn) { _f = fn; },
+            configurable: true,
+            enumerable: true
+          });
+        } catch (_) {}
+        try {
+          if (typeof Window !== 'undefined' && Window.prototype) {
+            Object.defineProperty(Window.prototype, 'fetch', {
+              get: function() { return _f; },
+              set: function(fn) { _f = fn; },
+              configurable: true,
+              enumerable: true
+            });
+          }
+        } catch (_) {}
+      })();
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Augusta Seed Company - Accounting & General Ledger ERP</title>
+    <meta name="description" content="Enterprise Accounting & ERP Management System for Augusta Seed Company, United Farm Road, Gulshan-e-Ali By Pass, Sahiwal. Phone: 03023576036." />
+    <meta property="og:title" content="Augusta Seed Company - Accounting & General Ledger ERP" />
+    <meta property="og:description" content="Enterprise Accounting & ERP Management System for Augusta Seed Company, United Farm Road, Gulshan-e-Ali By Pass, Sahiwal. Phone: 03023576036." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/jpeg" href="/augusta_seed_logo.jpg" />
+  </head>
+  <body class="bg-gray-100 text-gray-900 antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

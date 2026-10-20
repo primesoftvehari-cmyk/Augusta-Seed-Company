@@ -1,0 +1,6 @@
+{
+  "name": "Augusta Seed Company",
+  "description": "Enterprise Accounting & ERP Management System for Augusta Seed Company, United Farm Road, Gulshan-e-Ali By Pass, Sahiwal. Features Chart of Accounts, Vouchers, Invoices, Ledgers, Trial Balance, Sundry Debtors, Daily Transactions, and StackCP MySQL backend integration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
