@@ -27,7 +27,7 @@ export interface UserProfile {
   createdAt: string;
 }
 
-export type AccountType = 'Assets' | 'Liabilities' | 'Equity' | 'Revenue' | 'Expenses' | 'General Ledgers';
+export type AccountType = 'Assets' | 'Liabilities' | 'Equity' | 'Revenue' | 'Expenses' | 'Cash/Banks' | 'General Ledgers';
 
 export interface Account {
   id: string;
@@ -37,6 +37,7 @@ export interface Account {
   accountType: AccountType;
   salesStaff?: string;
   phone?: string;
+  address?: string;
   openingBalance: number;
   openingBalanceType: 'Dr' | 'Cr';
   description?: string;
@@ -173,6 +174,7 @@ export interface Invoice {
   grossTotal: number;
   discountTotal: number;
   netTotal: number;
+  description?: string;
   remarks?: string;
   createdBy: string;
   createdAt: string;

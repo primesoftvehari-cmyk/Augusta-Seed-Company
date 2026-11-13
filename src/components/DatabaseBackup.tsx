@@ -19,11 +19,51 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
     users: 0
   });
 
-  const [dbStatus, setDbStatus] = useState<DatabaseStatus>({ type: 'local', connected: false });
+  const [dbStatus, setDbStatus] = useState<DatabaseStatus>({ type: 'mysql', connected: false });
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [restoreFile, setRestoreFile] = useState<File | null>(null);
   const [showConfirmRestore, setShowConfirmRestore] = useState(false);
+
+  const [sqlQuery, setSqlQuery] = useState(`-- Sales Invoice SQL Example for Augusta Seed Company
+INSERT INTO \`invoices\` (
+  \`id\`, \`invoice_no\`, \`invoice_type\`, \`date\`, \`account_name\`, 
+  \`sales_staff\`, \`territory\`, \`items\`, \`gross_total\`, \`discount_total\`, \`net_total\`, \`description\`, \`remarks\`, \`created_by\`, \`created_at\`
+) VALUES (
+  'inv_sample_01', 'SI-2026-001', 'SALES_CREDIT', '2026-10-30', 
+  'Sundry Debtors / Seed Growers (Receivables)', 'Nasir Ali Sahiwal', 
+  'Sahiwal Head Office',
+  '[{"productId":"p_1","productCode":"SD-WHT-01","productName":"Wheat Seed Akbar 2019 Certified","packSize":"50kg","quantity":10,"rate":4800,"amount":48000}]',
+  48000.00, 0.00, 48000.00, 
+  'Certified Wheat Seed supply for Rabi sowing season', 
+  'Verified by Punjab Seed Corp', 'admin', NOW()
+);
+
+SELECT invoice_no, invoice_type, date, account_name, net_total, description 
+FROM invoices 
+WHERE invoice_type LIKE 'SALES_%' 
+ORDER BY date DESC;`);
+  const [queryResult, setQueryResult] = useState<any>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
+  const [queryRunning, setQueryRunning] = useState(false);
+
+  const handleRunQuery = async () => {
+    if (!sqlQuery.trim()) return;
+    try {
+      setQueryRunning(true);
+      setQueryError(null);
+      setQueryResult(null);
+      const res = await db.executeSQLQuery(sqlQuery);
+      if (!res.success) {
+        throw new Error(res.error || 'SQL execution failed.');
+      }
+      setQueryResult(res.result);
+    } catch (e: any) {
+      setQueryError(e.message || String(e));
+    } finally {
+      setQueryRunning(false);
+    }
+  };
 
   useEffect(() => {
     loadStats();
@@ -59,7 +99,7 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
     setDbStatus(s);
   };
 
-  const handleDownloadBackup = async () => {
+  const handleDownloadJsonBackup = async () => {
     try {
       setLoading(true);
       setMessage(null);
@@ -98,26 +138,35 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
       downloadAnchor.click();
       downloadAnchor.remove();
 
-      setMessage({ type: 'success', text: 'Database backup downloaded successfully to your local drive!' });
+      setMessage({ type: 'success', text: 'JSON database backup downloaded successfully!' });
     } catch (e: any) {
-      setMessage({ type: 'error', text: `Failed to generate backup: ${e.message || e}` });
+      setMessage({ type: 'error', text: `Failed to generate JSON backup: ${e.message || e}` });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleDownloadSqlSchema = async () => {
-    const sql = await db.getMySQLSchema();
-    const blob = new Blob([sql], { type: 'text/sql' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'augusta_seed_company_mysql_schema.sql';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    setMessage({ type: 'success', text: 'MySQL Schema SQL script downloaded successfully!' });
+  const handleDownloadSqlBackup = async () => {
+    try {
+      setLoading(true);
+      setMessage(null);
+      const sql = await db.getMySQLExportDataSql();
+      const blob = new Blob([sql], { type: 'text/sql' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStr = new Date().toISOString().split('T')[0];
+      a.download = `augusta_seed_mysql_dump_${dateStr}.sql`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setMessage({ type: 'success', text: 'MySQL SQL database dump downloaded successfully!' });
+    } catch (e: any) {
+      setMessage({ type: 'error', text: `Failed to download SQL dump: ${e.message || e}` });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,13 +183,35 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
       setLoading(true);
       setMessage(null);
       const fileText = await restoreFile.text();
-      const parsed = JSON.parse(fileText);
 
-      if (!parsed || !parsed.data) {
-        throw new Error('Invalid backup file structure. Missing data payload.');
+      // Check if uploaded file is SQL dump (.sql)
+      if (restoreFile.name.endsWith('.sql') || fileText.includes('CREATE TABLE') || fileText.includes('REPLACE INTO')) {
+        const res = await fetch('/api/database/restore-sql', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sqlScript: fileText })
+        });
+        const json = await res.json();
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || 'SQL restore failed.');
+        }
+        await loadStats();
+        setMessage({ type: 'success', text: 'MySQL database restored successfully from SQL dump!' });
+        setShowConfirmRestore(false);
+        setRestoreFile(null);
+        setLoading(false);
+        return;
       }
 
-      const { accounts, products, staff, territories, companyProfile, vouchers, invoices, users } = parsed.data;
+      // Otherwise treat as JSON backup
+      const parsed = JSON.parse(fileText);
+      const payload = parsed.data || parsed;
+
+      if (!payload) {
+        throw new Error('Invalid backup file structure.');
+      }
+
+      const { accounts, products, staff, territories, companyProfile, vouchers, invoices, users } = payload;
 
       if (companyProfile) {
         await db.saveCompanyProfile(companyProfile);
@@ -182,7 +253,7 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
       }
 
       await loadStats();
-      setMessage({ type: 'success', text: 'Database restored successfully from local backup file!' });
+      setMessage({ type: 'success', text: 'Database restored successfully from JSON backup file!' });
       setShowConfirmRestore(false);
       setRestoreFile(null);
     } catch (e: any) {
@@ -198,30 +269,30 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
       <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
         <div className="flex items-center justify-between flex-wrap gap-4 pb-4 border-b border-gray-100">
           <div className="flex items-center space-x-3">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-bold">
+            <div className="w-12 h-12 rounded-xl bg-red-50 text-red-700 flex items-center justify-center font-bold">
               <Database className="w-6 h-6" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-gray-900">Database & Backup Management</h2>
+              <h2 className="text-xl font-bold text-gray-900 uppercase">Database & Backup Management</h2>
               <p className="text-sm text-gray-500">
-                StackCP MySQL status, JSON database snapshot, and local disk restoration
+                MySQL connection status, JSON snapshots, and SQL dump backup & restore
               </p>
             </div>
           </div>
-          <div className="flex space-x-3">
+          <div className="flex space-x-3 flex-wrap gap-2">
             <button
               onClick={onOpenMySQLModal}
-              className="flex items-center space-x-2 bg-emerald-700 hover:bg-emerald-800 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-xs transition-colors cursor-pointer"
+              className="flex items-center space-x-2 bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-xs transition-colors cursor-pointer"
             >
               <Database className="w-4 h-4" />
               <span>Configure MySQL Server</span>
             </button>
             <button
-              onClick={handleDownloadSqlSchema}
-              className="flex items-center space-x-1.5 bg-gray-800 hover:bg-gray-900 text-white px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
+              onClick={handleDownloadSqlBackup}
+              className="flex items-center space-x-1.5 bg-gray-900 hover:bg-black text-white px-3.5 py-2 rounded-lg text-sm font-semibold transition-colors cursor-pointer"
             >
-              <Terminal className="w-4 h-4 text-emerald-300" />
-              <span>Download MySQL .sql</span>
+              <Terminal className="w-4 h-4 text-red-400" />
+              <span>Download SQL Dump</span>
             </button>
           </div>
         </div>
@@ -229,9 +300,9 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
         {/* Database backend status bar */}
         <div className="mt-4 p-4 rounded-xl bg-gray-50 border border-gray-200 flex items-center justify-between flex-wrap gap-2 text-xs">
           <div className="flex items-center space-x-2">
-            <span className={`w-3 h-3 rounded-full ${dbStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></span>
+            <span className={`w-3 h-3 rounded-full ${dbStatus.connected ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`}></span>
             <span className="font-bold text-gray-800">
-              Active Storage: {dbStatus.connected ? `MySQL StackCP (${dbStatus.host}:${dbStatus.port})` : 'Local High-Speed Storage Engine'}
+              Active Storage: {dbStatus.connected ? `MySQL (${dbStatus.host}:${dbStatus.port} - ${dbStatus.database})` : 'MySQL Disconnected'}
             </span>
           </div>
           <span className="text-gray-500">{dbStatus.message}</span>
@@ -250,123 +321,198 @@ export const DatabaseBackupComponent: React.FC<DatabaseBackupProps> = ({ current
             ) : (
               <AlertTriangle className="w-5 h-5 shrink-0 text-red-600" />
             )}
-            <span className="text-sm font-medium">{message.text}</span>
+            <p className="text-sm font-medium">{message.text}</p>
           </div>
         )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-          {/* Backup Box */}
-          <div className="bg-gradient-to-br from-emerald-50/60 to-white rounded-xl p-6 border border-emerald-100 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center space-x-2 text-emerald-800 font-bold text-lg mb-2">
-                <Download className="w-5 h-5" />
-                <h3>Export Database Backup</h3>
-              </div>
-              <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-                Export all Augusta Seed Company records including Chart of Accounts, Certified Seed Varieties, Sales Staff,
-                Territories, Company Profile, Vouchers, Invoices, and Users into a portable JSON backup file.
-              </p>
-            </div>
-            <button
-              onClick={handleDownloadBackup}
-              disabled={loading}
-              className="w-full py-3 bg-emerald-700 hover:bg-emerald-800 text-white font-semibold rounded-lg shadow-md transition-all flex items-center justify-center space-x-2 disabled:opacity-50 cursor-pointer"
-            >
-              <HardDrive className="w-5 h-5" />
-              <span>{loading ? 'Generating Backup...' : 'Download Backup File (.json)'}</span>
-            </button>
-          </div>
-
-          {/* Restore Box */}
-          <div className="bg-gradient-to-br from-amber-50/60 to-white rounded-xl p-6 border border-amber-100 shadow-xs flex flex-col justify-between">
-            <div>
-              <div className="flex items-center space-x-2 text-amber-900 font-bold text-lg mb-2">
-                <Upload className="w-5 h-5" />
-                <h3>Restore Database</h3>
-              </div>
-              <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-                Restore your application database from a previously saved local JSON backup file. This will restore all
-                accounts, vouchers, invoices, and seed variety entries into the system.
-              </p>
-            </div>
-            <div>
-              <label className="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-md transition-all flex items-center justify-center space-x-2 cursor-pointer">
-                <FileJson className="w-5 h-5" />
-                <span>Select Backup File from Drive</span>
-                <input type="file" accept=".json" onChange={handleFileChange} className="hidden" />
-              </label>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Database Statistics Summary */}
-      <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center space-x-2">
-          <ShieldCheck className="w-5 h-5 text-emerald-600" />
-          <span>Current Database Statistics</span>
-        </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Accounts</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.accounts}</p>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+          <p className="text-xs font-semibold text-gray-500 uppercase">Accounts</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{stats.accounts}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+          <p className="text-xs font-semibold text-gray-500 uppercase">Products / Seeds</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{stats.products}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+          <p className="text-xs font-semibold text-gray-500 uppercase">Vouchers</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{stats.vouchers}</p>
+        </div>
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-xs text-center">
+          <p className="text-xs font-semibold text-gray-500 uppercase">Invoices</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">{stats.invoices}</p>
+        </div>
+      </div>
+
+      {/* Backup & Restore Action Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Export / Backup Card */}
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3 text-red-700">
+              <Download className="w-6 h-6" />
+              <h3 className="text-lg font-bold text-gray-900">Backup & Export Database</h3>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Export a complete snapshot of all Augusta Seed Company accounts, inventory, sales staff, territories, vouchers, and invoices. You can download as a JSON backup or a fully executable MySQL `.sql` dump file.
+            </p>
           </div>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Seed Varieties</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.products}</p>
+          <div className="pt-6 space-y-3">
+            <button
+              onClick={handleDownloadJsonBackup}
+              disabled={loading}
+              className="w-full flex items-center justify-center space-x-2 bg-red-700 hover:bg-red-800 text-white py-2.5 rounded-lg text-sm font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <FileJson className="w-4 h-4" />
+              <span>Download JSON Backup</span>
+            </button>
+            <button
+              onClick={handleDownloadSqlBackup}
+              disabled={loading}
+              className="w-full flex items-center justify-center space-x-2 bg-gray-800 hover:bg-black text-white py-2.5 rounded-lg text-sm font-bold transition-colors cursor-pointer disabled:opacity-50"
+            >
+              <Terminal className="w-4 h-4 text-red-400" />
+              <span>Download MySQL SQL Dump (.sql)</span>
+            </button>
           </div>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Invoices</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.invoices}</p>
+        </div>
+
+        {/* Import / Restore Card */}
+        <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6 flex flex-col justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center space-x-3 text-gray-900">
+              <Upload className="w-6 h-6 text-red-700" />
+              <h3 className="text-lg font-bold text-gray-900">Restore Database</h3>
+            </div>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              Restore your database by uploading a previously saved backup file (`.json` or `.sql`). All records will be safely merged and imported into your MySQL database.
+            </p>
           </div>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Vouchers</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.vouchers}</p>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Sales Staff</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.staff}</p>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Territories</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.territories}</p>
-          </div>
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
-            <p className="text-xs text-gray-500 uppercase tracking-wider font-semibold">Users</p>
-            <p className="text-2xl font-black text-gray-900 mt-1">{stats.users}</p>
+          <div className="pt-6">
+            <label className="block w-full border-2 border-dashed border-gray-300 hover:border-red-700 rounded-xl p-6 text-center cursor-pointer transition-colors bg-gray-50 hover:bg-red-50/20">
+              <Upload className="w-8 h-8 text-red-700 mx-auto mb-2" />
+              <span className="text-sm font-bold text-gray-700 block">Click to select backup file (.json or .sql)</span>
+              <span className="text-xs text-gray-400 mt-1 block">Ensure you have an active MySQL connection</span>
+              <input
+                type="file"
+                accept=".json,.sql"
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </label>
           </div>
         </div>
       </div>
 
-      {/* Confirmation Modal for Restore */}
-      {showConfirmRestore && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 space-y-4">
-            <div className="w-12 h-12 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
+      {/* SQL Editor & Sales Invoice Runner Card */}
+      <div className="bg-white rounded-xl shadow-xs border border-gray-200 p-6 space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div className="flex items-center space-x-3 text-gray-900">
+            <Terminal className="w-6 h-6 text-red-700" />
+            <div>
+              <h3 className="text-lg font-bold text-gray-900">MySQL SQL Editor & Sales Invoice Runner</h3>
+              <p className="text-xs text-gray-500">Run custom SQL queries (including Sales Invoice inserts and selects) directly on your MySQL database</p>
             </div>
-            <h3 className="text-lg font-bold text-center text-gray-900">Confirm Database Restoration</h3>
-            <p className="text-sm text-gray-600 text-center">
-              You selected <span className="font-semibold text-gray-900">{restoreFile?.name}</span>. Restoring this backup
-              will merge and update records in your database. Do you want to proceed?
+          </div>
+          <button
+            onClick={handleRunQuery}
+            disabled={queryRunning}
+            className="flex items-center space-x-2 bg-red-700 hover:bg-red-800 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-xs transition-colors cursor-pointer disabled:opacity-50"
+          >
+            <Terminal className="w-4 h-4" />
+            <span>{queryRunning ? 'Executing SQL...' : 'Run SQL Query'}</span>
+          </button>
+        </div>
+
+        <div>
+          <textarea
+            value={sqlQuery}
+            onChange={e => setSqlQuery(e.target.value)}
+            rows={8}
+            className="w-full font-mono text-xs p-3 rounded-xl border border-gray-300 focus:border-red-700 focus:outline-hidden bg-gray-900 text-emerald-300"
+            placeholder="Type your SQL query here..."
+          />
+        </div>
+
+        {queryError && (
+          <div className="p-3 bg-red-50 text-red-800 border border-red-200 rounded-lg text-xs font-mono">
+            Error: {queryError}
+          </div>
+        )}
+
+        {queryResult !== null && (
+          <div className="space-y-2 pt-2 border-t border-gray-100">
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-600">Query Execution Result:</p>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 overflow-x-auto max-h-96">
+              {Array.isArray(queryResult) ? (
+                queryResult.length === 0 ? (
+                  <p className="text-xs text-gray-500 italic">Query executed successfully. 0 rows returned.</p>
+                ) : (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-100 font-bold text-gray-700">
+                        {Object.keys(queryResult[0]).map((key, i) => (
+                          <th key={i} className="p-2">{key}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200">
+                      {queryResult.map((row: any, rIdx: number) => (
+                        <tr key={rIdx} className="hover:bg-gray-100/50">
+                          {Object.values(row).map((val: any, cIdx: number) => (
+                            <td key={cIdx} className="p-2 font-mono text-[11px] text-gray-800">
+                              {typeof val === 'object' ? JSON.stringify(val) : String(val ?? '')}
+                            </td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )
+              ) : (
+                <pre className="text-xs font-mono text-emerald-800 whitespace-pre-wrap">
+                  {JSON.stringify(queryResult, null, 2)}
+                </pre>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Confirmation Modal */}
+      {showConfirmRestore && restoreFile && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-white rounded-xl shadow-2xl p-6 space-y-4">
+            <div className="flex items-center space-x-3 text-amber-600">
+              <AlertTriangle className="w-6 h-6 shrink-0" />
+              <h3 className="text-lg font-bold text-gray-900">Confirm Database Restore</h3>
+            </div>
+            <p className="text-sm text-gray-600">
+              You are about to restore data from <span className="font-bold text-gray-900">{restoreFile.name}</span> into your active MySQL database. Existing records with matching IDs will be updated.
             </p>
-            <div className="flex space-x-3 pt-2">
+            <div className="bg-gray-50 p-3 rounded-lg text-xs font-mono text-gray-700 border border-gray-200">
+              Size: {(restoreFile.size / 1024).toFixed(2)} KB
+            </div>
+            <div className="flex justify-end space-x-3 pt-2">
               <button
+                type="button"
                 onClick={() => {
                   setShowConfirmRestore(false);
                   setRestoreFile(null);
                 }}
-                disabled={loading}
-                className="flex-1 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-lg transition-colors cursor-pointer"
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg cursor-pointer"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleExecuteRestore}
                 disabled={loading}
-                className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold rounded-lg shadow-md transition-colors cursor-pointer"
+                className="px-5 py-2 text-sm font-bold text-white bg-red-700 hover:bg-red-800 rounded-lg shadow-sm cursor-pointer disabled:opacity-50"
               >
-                {loading ? 'Restoring...' : 'Yes, Restore'}
+                {loading ? 'Restoring...' : 'Confirm & Restore'}
               </button>
             </div>
           </div>

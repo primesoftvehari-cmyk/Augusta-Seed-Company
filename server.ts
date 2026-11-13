@@ -76,9 +76,9 @@ const DEFAULT_USER = {
 };
 
 const DEFAULT_ACCOUNTS = [
-  { id: 'acc_1', code: '1001', name: 'Cash in Hand (Sahiwal Office)', parentAccount: 'Cash & Bank Balances', accountType: 'Assets', salesStaff: 'Nasir Ali Sahiwal', phone: '03023576036', openingBalance: 150000, openingBalanceType: 'Dr', description: 'Primary operational cash vault', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
-  { id: 'acc_2', code: '1002', name: 'Habib Bank Limited (HBL Sahiwal)', parentAccount: 'Cash & Bank Balances', accountType: 'Assets', salesStaff: 'Nasir Ali Sahiwal', phone: '0404466221', openingBalance: 850000, openingBalanceType: 'Dr', description: 'Main company corporate account', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
-  { id: 'acc_3', code: '1003', name: 'MCB Bank Islamic (Sahiwal)', parentAccount: 'Cash & Bank Balances', accountType: 'Assets', salesStaff: 'Nasir Ali Sahiwal', phone: '0404466222', openingBalance: 450000, openingBalanceType: 'Dr', description: 'Seed vendor clearing account', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
+  { id: 'acc_1', code: '1001', name: 'Cash in Hand (Sahiwal Office)', parentAccount: 'Cash & Bank Balances', accountType: 'Cash/Banks', salesStaff: 'Nasir Ali Sahiwal', phone: '03023576036', openingBalance: 150000, openingBalanceType: 'Dr', description: 'Primary operational cash vault', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
+  { id: 'acc_2', code: '1002', name: 'Habib Bank Limited (HBL Sahiwal)', parentAccount: 'Cash & Bank Balances', accountType: 'Cash/Banks', salesStaff: 'Nasir Ali Sahiwal', phone: '0404466221', openingBalance: 850000, openingBalanceType: 'Dr', description: 'Main company corporate account', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
+  { id: 'acc_3', code: '1003', name: 'MCB Bank Islamic (Sahiwal)', parentAccount: 'Cash & Bank Balances', accountType: 'Cash/Banks', salesStaff: 'Nasir Ali Sahiwal', phone: '0404466222', openingBalance: 450000, openingBalanceType: 'Dr', description: 'Seed vendor clearing account', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
   { id: 'acc_4', code: '1004', name: 'Sundry Debtors / Seed Growers (Receivables)', parentAccount: 'Current Assets', accountType: 'Assets', salesStaff: 'Nasir Ali Sahiwal', phone: '03023576036', openingBalance: 320000, openingBalanceType: 'Dr', description: 'Receivables from seed dealers & farmers', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
   { id: 'acc_5', code: '1005', name: 'Stock in Trade (Certified Seeds)', parentAccount: 'Inventories', accountType: 'Assets', salesStaff: 'Nasir Ali Sahiwal', phone: '03023576036', openingBalance: 1250000, openingBalanceType: 'Dr', description: 'Certified seed stock in godown', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
   { id: 'acc_6', code: '2001', name: 'Sundry Creditors (Seed Producers/Farms)', parentAccount: 'Current Liabilities', accountType: 'Liabilities', salesStaff: 'Nasir Ali Sahiwal', phone: '03023576036', openingBalance: 180000, openingBalanceType: 'Cr', description: 'Payables to registered seed producers', active: true, createdAt: '2026-10-01T10:00:00.000Z' },
@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS accounts (
   account_type VARCHAR(100) NOT NULL,
   sales_staff VARCHAR(255),
   phone VARCHAR(100),
+  address VARCHAR(255),
   opening_balance DECIMAL(15,2) DEFAULT 0.00,
   opening_balance_type VARCHAR(10) DEFAULT 'Dr',
   description TEXT,
@@ -331,6 +332,7 @@ CREATE TABLE IF NOT EXISTS invoices (
   gross_total DECIMAL(15,2) NOT NULL,
   discount_total DECIMAL(15,2) NOT NULL,
   net_total DECIMAL(15,2) NOT NULL,
+  description TEXT,
   remarks TEXT,
   created_by VARCHAR(255),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -450,6 +452,7 @@ async function initMySQL(config?: { host: string; port: number; user: string; pa
         account_type VARCHAR(100) NOT NULL,
         sales_staff VARCHAR(255),
         phone VARCHAR(100),
+        address VARCHAR(255),
         opening_balance DECIMAL(15,2) DEFAULT 0.00,
         opening_balance_type VARCHAR(10) DEFAULT 'Dr',
         description TEXT,
@@ -539,11 +542,58 @@ async function initMySQL(config?: { host: string; port: number; user: string; pa
         gross_total DECIMAL(15,2) NOT NULL,
         discount_total DECIMAL(15,2) NOT NULL,
         net_total DECIMAL(15,2) NOT NULL,
+        description TEXT,
         remarks TEXT,
         created_by VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
+
+    // Ensure columns exist on existing tables if created previously without them
+    const addCol = async (tableName: string, colDef: string) => {
+      try {
+        await pool.query(`ALTER TABLE ${tableName} ADD COLUMN ${colDef}`);
+      } catch (e: any) {
+        // Ignore duplicate column errors (ER_DUP_FIELDNAME / 1060)
+      }
+    };
+
+    await addCol('accounts', 'address VARCHAR(255)');
+    await addCol('accounts', 'phone VARCHAR(100)');
+    await addCol('accounts', 'sales_staff VARCHAR(255)');
+    await addCol('accounts', 'parent_account VARCHAR(255)');
+    await addCol('accounts', 'opening_balance DECIMAL(15,2) DEFAULT 0.00');
+    await addCol('accounts', 'opening_balance_type VARCHAR(10) DEFAULT "Dr"');
+    await addCol('accounts', 'description TEXT');
+    await addCol('accounts', 'active TINYINT(1) DEFAULT 1');
+
+    await addCol('invoices', 'description TEXT');
+    await addCol('invoices', 'territory VARCHAR(150)');
+    await addCol('invoices', 'original_invoice_no VARCHAR(100)');
+    await addCol('invoices', 'reason TEXT');
+    await addCol('invoices', 'discount_total DECIMAL(15,2) DEFAULT 0.00');
+
+    await addCol('sales_staff', 'father_name VARCHAR(255)');
+    await addCol('sales_staff', 'whatsapp VARCHAR(100)');
+    await addCol('sales_staff', 'address TEXT');
+    await addCol('sales_staff', 'city VARCHAR(100)');
+    await addCol('sales_staff', 'territory VARCHAR(150)');
+    await addCol('sales_staff', 'joining_date DATE');
+    await addCol('sales_staff', 'status VARCHAR(50) DEFAULT "Active"');
+    await addCol('sales_staff', 'remarks TEXT');
+
+    await addCol('products', 'category VARCHAR(100)');
+    await addCol('products', 'variety VARCHAR(100)');
+    await addCol('products', 'unit VARCHAR(50)');
+    await addCol('products', 'pack_size VARCHAR(50)');
+    await addCol('products', 'purchase_rate DECIMAL(15,2) DEFAULT 0.00');
+    await addCol('products', 'sale_rate DECIMAL(15,2) DEFAULT 0.00');
+    await addCol('products', 'current_stock DECIMAL(15,2) DEFAULT 0.00');
+    await addCol('products', 'minimum_stock DECIMAL(15,2) DEFAULT 0.00');
+    await addCol('products', 'lot_no VARCHAR(100)');
+    await addCol('products', 'status VARCHAR(50) DEFAULT "Active"');
+    await addCol('products', 'remarks TEXT');
+
 
     mysqlPool = pool;
     mysqlConnected = true;
@@ -695,7 +745,7 @@ REPLACE INTO \`company_profile\` (\`id\`, \`company_name\`, \`head_office_addres
   if (store.accounts.length > 0) {
     sql += `\n-- Dumping accounts\n`;
     for (const a of store.accounts) {
-      sql += `REPLACE INTO \`accounts\` (\`id\`, \`code\`, \`name\`, \`parent_account\`, \`account_type\`, \`sales_staff\`, \`phone\`, \`opening_balance\`, \`opening_balance_type\`, \`description\`, \`active\`, \`created_at\`) VALUES (${escapeSql(a.id)}, ${escapeSql(a.code)}, ${escapeSql(a.name)}, ${escapeSql(a.parentAccount)}, ${escapeSql(a.accountType)}, ${escapeSql(a.salesStaff)}, ${escapeSql(a.phone)}, ${Number(a.openingBalance || 0)}, ${escapeSql(a.openingBalanceType || 'Dr')}, ${escapeSql(a.description)}, ${a.active ? 1 : 0}, ${escapeSql(a.createdAt)});\n`;
+      sql += `REPLACE INTO \`accounts\` (\`id\`, \`code\`, \`name\`, \`parent_account\`, \`account_type\`, \`sales_staff\`, \`phone\`, \`address\`, \`opening_balance\`, \`opening_balance_type\`, \`description\`, \`active\`, \`created_at\`) VALUES (${escapeSql(a.id)}, ${escapeSql(a.code)}, ${escapeSql(a.name)}, ${escapeSql(a.parentAccount)}, ${escapeSql(a.accountType)}, ${escapeSql(a.salesStaff)}, ${escapeSql(a.phone)}, ${escapeSql(a.address)}, ${Number(a.openingBalance || 0)}, ${escapeSql(a.openingBalanceType || 'Dr')}, ${escapeSql(a.description)}, ${a.active ? 1 : 0}, ${escapeSql(a.createdAt)});\n`;
     }
   }
 
@@ -725,6 +775,46 @@ app.post('/api/database/clear-all', async (req: Request, res: Response) => {
   }
   res.json({ success: true, message: 'All transactions cleared.' });
 });
+
+app.post('/api/database/restore-sql', async (req: Request, res: Response) => {
+  const { sqlScript } = req.body;
+  if (!sqlScript || typeof sqlScript !== 'string') {
+    return res.status(400).json({ success: false, error: 'Valid SQL script string is required.' });
+  }
+  if (!mysqlConnected || !mysqlPool) {
+    return res.status(500).json({ success: false, error: 'MySQL Database is not connected. Cannot execute SQL restore.' });
+  }
+  try {
+    const statements = sqlScript
+      .split(/;\s*[\r\n]+/)
+      .map(s => s.trim())
+      .filter(s => s.length > 0 && !s.startsWith('--'));
+
+    for (const stmt of statements) {
+      await mysqlPool.query(stmt);
+    }
+    res.json({ success: true, message: 'SQL database restored successfully!' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'SQL execution failed during restore.' });
+  }
+});
+
+app.post('/api/database/query', async (req: Request, res: Response) => {
+  const { sql } = req.body;
+  if (!sql || typeof sql !== 'string') {
+    return res.status(400).json({ success: false, error: 'SQL query string is required.' });
+  }
+  if (!mysqlConnected || !mysqlPool) {
+    return res.status(500).json({ success: false, error: 'MySQL Database is not connected. Cannot execute query.' });
+  }
+  try {
+    const [result] = await mysqlPool.query(sql);
+    res.json({ success: true, result });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || 'SQL execution failed.' });
+  }
+});
+
 
 // Company Profile API
 app.get('/api/company-profile', async (req: Request, res: Response) => {
@@ -888,6 +978,7 @@ app.get('/api/accounts', async (req: Request, res: Response) => {
           accountType: r.account_type,
           salesStaff: r.sales_staff,
           phone: r.phone,
+          address: r.address,
           openingBalance: Number(r.opening_balance || 0),
           openingBalanceType: r.opening_balance_type || 'Dr',
           description: r.description,
@@ -917,8 +1008,8 @@ app.post('/api/accounts', async (req: Request, res: Response) => {
   if (mysqlConnected && mysqlPool) {
     try {
       await mysqlPool.query(`
-        INSERT INTO accounts (id, code, name, parent_account, account_type, sales_staff, phone, opening_balance, opening_balance_type, description, active, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO accounts (id, code, name, parent_account, account_type, sales_staff, phone, address, opening_balance, opening_balance_type, description, active, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           code=VALUES(code),
           name=VALUES(name),
@@ -926,6 +1017,7 @@ app.post('/api/accounts', async (req: Request, res: Response) => {
           account_type=VALUES(account_type),
           sales_staff=VALUES(sales_staff),
           phone=VALUES(phone),
+          address=VALUES(address),
           opening_balance=VALUES(opening_balance),
           opening_balance_type=VALUES(opening_balance_type),
           description=VALUES(description),
@@ -938,14 +1030,16 @@ app.post('/api/accounts', async (req: Request, res: Response) => {
         account.accountType,
         account.salesStaff || null,
         account.phone || null,
+        account.address || null,
         account.openingBalance || 0,
         account.openingBalanceType || 'Dr',
         account.description || null,
         account.active ? 1 : 0,
         account.createdAt || new Date()
       ]);
-    } catch (e) {
+    } catch (e: any) {
       console.error('MySQL write error (accounts):', e);
+      return res.status(500).json({ error: e.message || 'Failed to save account to MySQL database.' });
     }
   }
   res.json({ success: true, account });
@@ -1253,17 +1347,8 @@ app.post('/api/vouchers', async (req: Request, res: Response) => {
       const formattedDate = voucher.date ? String(voucher.date).split('T')[0] : new Date().toISOString().split('T')[0];
       const linesJson = typeof voucher.lines === 'string' ? voucher.lines : JSON.stringify(voucher.lines || []);
       await mysqlPool.query(`
-        INSERT INTO \`vouchers\` (\`id\`, \`voucher_no\`, \`voucher_type\`, \`date\`, \`sales_staff\`, \`lines\`, \`total_amount\`, \`narration\`, \`created_by\`, \`created_at\`)
+        REPLACE INTO \`vouchers\` (\`id\`, \`voucher_no\`, \`voucher_type\`, \`date\`, \`sales_staff\`, \`lines\`, \`total_amount\`, \`narration\`, \`created_by\`, \`created_at\`)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          \`voucher_no\`=VALUES(\`voucher_no\`),
-          \`voucher_type\`=VALUES(\`voucher_type\`),
-          \`date\`=VALUES(\`date\`),
-          \`sales_staff\`=VALUES(\`sales_staff\`),
-          \`lines\`=VALUES(\`lines\`),
-          \`total_amount\`=VALUES(\`total_amount\`),
-          \`narration\`=VALUES(\`narration\`),
-          \`created_by\`=VALUES(\`created_by\`)
       `, [
         voucher.id,
         voucher.voucherNo,
@@ -1278,6 +1363,7 @@ app.post('/api/vouchers', async (req: Request, res: Response) => {
       ]);
     } catch (e: any) {
       console.error('MySQL write error (vouchers):', e);
+      return res.status(500).json({ error: e.message || 'Failed to save voucher to MySQL.' });
     }
   }
   res.json({ success: true, voucher });
@@ -1290,8 +1376,9 @@ app.delete('/api/vouchers/:id', async (req: Request, res: Response) => {
   if (mysqlConnected && mysqlPool) {
     try {
       await mysqlPool.query('DELETE FROM `vouchers` WHERE `id` = ?', [id]);
-    } catch (e) {
+    } catch (e: any) {
       console.error('MySQL delete error (vouchers):', e);
+      return res.status(500).json({ error: e.message || 'Failed to delete voucher from MySQL.' });
     }
   }
   res.json({ success: true });
@@ -1316,6 +1403,7 @@ app.get('/api/invoices', async (req: Request, res: Response) => {
         grossTotal: Number(r.gross_total || 0),
         discountTotal: Number(r.discount_total || 0),
         netTotal: Number(r.net_total || 0),
+        description: r.description || r.remarks,
         remarks: r.remarks,
         createdBy: r.created_by,
         createdAt: r.created_at
@@ -1338,23 +1426,8 @@ app.post('/api/invoices', async (req: Request, res: Response) => {
       const formattedDate = invoice.date ? String(invoice.date).split('T')[0] : new Date().toISOString().split('T')[0];
       const itemsJson = typeof invoice.items === 'string' ? invoice.items : JSON.stringify(invoice.items || []);
       await mysqlPool.query(`
-        INSERT INTO \`invoices\` (\`id\`, \`invoice_no\`, \`invoice_type\`, \`date\`, \`account_name\`, \`sales_staff\`, \`territory\`, \`original_invoice_no\`, \`reason\`, \`items\`, \`gross_total\`, \`discount_total\`, \`net_total\`, \`remarks\`, \`created_by\`, \`created_at\`)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON DUPLICATE KEY UPDATE
-          \`invoice_no\`=VALUES(\`invoice_no\`),
-          \`invoice_type\`=VALUES(\`invoice_type\`),
-          \`date\`=VALUES(\`date\`),
-          \`account_name\`=VALUES(\`account_name\`),
-          \`sales_staff\`=VALUES(\`sales_staff\`),
-          \`territory\`=VALUES(\`territory\`),
-          \`original_invoice_no\`=VALUES(\`original_invoice_no\`),
-          \`reason\`=VALUES(\`reason\`),
-          \`items\`=VALUES(\`items\`),
-          \`gross_total\`=VALUES(\`gross_total\`),
-          \`discount_total\`=VALUES(\`discount_total\`),
-          \`net_total\`=VALUES(\`net_total\`),
-          \`remarks\`=VALUES(\`remarks\`),
-          \`created_by\`=VALUES(\`created_by\`)
+        REPLACE INTO \`invoices\` (\`id\`, \`invoice_no\`, \`invoice_type\`, \`date\`, \`account_name\`, \`sales_staff\`, \`territory\`, \`original_invoice_no\`, \`reason\`, \`items\`, \`gross_total\`, \`discount_total\`, \`net_total\`, \`description\`, \`remarks\`, \`created_by\`, \`created_at\`)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `, [
         invoice.id,
         invoice.invoiceNo,
@@ -1369,12 +1442,14 @@ app.post('/api/invoices', async (req: Request, res: Response) => {
         Number(invoice.grossTotal || 0),
         Number(invoice.discountTotal || 0),
         Number(invoice.netTotal || 0),
+        invoice.description || invoice.remarks || null,
         invoice.remarks || null,
         invoice.createdBy || 'System',
         invoice.createdAt ? new Date(invoice.createdAt) : new Date()
       ]);
     } catch (e: any) {
       console.error('MySQL write error (invoices):', e);
+      return res.status(500).json({ error: e.message || 'Failed to save invoice to MySQL database.' });
     }
   }
   res.json({ success: true, invoice });

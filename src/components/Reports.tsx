@@ -42,7 +42,8 @@ export const ReportsComponent: React.FC<{
             qty: item.quantity,
             rate: item.rate,
             discount: item.discount,
-            netAmount: item.amount
+            netAmount: item.amount,
+            description: inv.description || inv.remarks || ''
           });
         });
       });
@@ -60,7 +61,8 @@ export const ReportsComponent: React.FC<{
             qty: item.quantity,
             rate: item.rate,
             discount: item.discount,
-            netAmount: item.amount
+            netAmount: item.amount,
+            description: inv.description || inv.remarks || ''
           });
         });
       });
@@ -98,13 +100,14 @@ export const ReportsComponent: React.FC<{
     if (reportType === 'sales') {
       autoTable(doc, {
         startY: 30,
-        head: [['Invoice No', 'Date', 'Customer', 'Staff', 'Product', 'Qty', 'Rate', 'Net Amount']],
+        head: [['Invoice No', 'Date', 'Customer', 'Staff', 'Product', 'Description', 'Qty', 'Rate', 'Net Amount']],
         body: reportData.map(r => [
           r.invoiceNo,
           r.date,
           r.customer,
           r.staff,
           r.product,
+          r.description || '',
           r.qty,
           r.rate.toLocaleString(),
           r.netAmount.toLocaleString()
@@ -113,12 +116,13 @@ export const ReportsComponent: React.FC<{
     } else if (reportType === 'purchase') {
       autoTable(doc, {
         startY: 30,
-        head: [['Invoice No', 'Date', 'Supplier', 'Product', 'Qty', 'Rate', 'Net Amount']],
+        head: [['Invoice No', 'Date', 'Supplier', 'Product', 'Description', 'Qty', 'Rate', 'Net Amount']],
         body: reportData.map(r => [
           r.invoiceNo,
           r.date,
           r.supplier,
           r.product,
+          r.description || '',
           r.qty,
           r.rate.toLocaleString(),
           r.netAmount.toLocaleString()
@@ -268,6 +272,7 @@ export const ReportsComponent: React.FC<{
                   <th className="py-3 px-4">Customer</th>
                   <th className="py-3 px-4">Staff</th>
                   <th className="py-3 px-4">Seed Product</th>
+                  <th className="py-3 px-4">Description</th>
                   <th className="py-3 px-4 text-right">Qty</th>
                   <th className="py-3 px-4 text-right">Rate</th>
                   <th className="py-3 px-4 text-right">Net Amount (PKR)</th>
@@ -276,7 +281,7 @@ export const ReportsComponent: React.FC<{
               <tbody className="divide-y divide-gray-100 text-sm">
                 {reportData.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-12 text-gray-400">
+                    <td colSpan={9} className="text-center py-12 text-gray-400">
                       No sales records found.
                     </td>
                   </tr>
@@ -288,6 +293,7 @@ export const ReportsComponent: React.FC<{
                       <td className="py-3 px-4 font-semibold text-gray-800">{r.customer}</td>
                       <td className="py-3 px-4 text-gray-600">{r.staff}</td>
                       <td className="py-3 px-4 text-gray-800">{r.product}</td>
+                      <td className="py-3 px-4 text-gray-600 text-xs italic">{r.description || '-'}</td>
                       <td className="py-3 px-4 text-right font-bold text-gray-800">{r.qty}</td>
                       <td className="py-3 px-4 text-right text-gray-700">{r.rate.toLocaleString()}</td>
                       <td className="py-3 px-4 text-right font-black text-emerald-800">{r.netAmount.toLocaleString()}</td>
@@ -308,6 +314,7 @@ export const ReportsComponent: React.FC<{
                   <th className="py-3 px-4">Date</th>
                   <th className="py-3 px-4">Supplier</th>
                   <th className="py-3 px-4">Seed Variety</th>
+                  <th className="py-3 px-4">Description</th>
                   <th className="py-3 px-4 text-right">Qty</th>
                   <th className="py-3 px-4 text-right">Rate</th>
                   <th className="py-3 px-4 text-right">Net Amount (PKR)</th>
@@ -316,7 +323,7 @@ export const ReportsComponent: React.FC<{
               <tbody className="divide-y divide-gray-100 text-sm">
                 {reportData.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-gray-400">
+                    <td colSpan={8} className="text-center py-12 text-gray-400">
                       No purchase records found.
                     </td>
                   </tr>
@@ -327,6 +334,7 @@ export const ReportsComponent: React.FC<{
                       <td className="py-3 px-4 text-gray-600 font-mono text-xs">{r.date}</td>
                       <td className="py-3 px-4 font-semibold text-gray-800">{r.supplier}</td>
                       <td className="py-3 px-4 text-gray-800">{r.product}</td>
+                      <td className="py-3 px-4 text-gray-600 text-xs italic">{r.description || '-'}</td>
                       <td className="py-3 px-4 text-right font-bold text-gray-800">{r.qty}</td>
                       <td className="py-3 px-4 text-right text-gray-700">{r.rate.toLocaleString()}</td>
                       <td className="py-3 px-4 text-right font-black text-emerald-800">{r.netAmount.toLocaleString()}</td>

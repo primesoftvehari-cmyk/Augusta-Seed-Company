@@ -68,9 +68,19 @@ export const LedgersComponent: React.FC = () => {
           ) {
             let debit = 0;
             let credit = 0;
-            if (inv.invoiceType === 'SALES_CASH' || inv.invoiceType === 'SALES_CREDIT' || inv.invoiceType === 'PURCHASE_RETURN') {
+            if (
+              inv.invoiceType === 'SALES_CASH' ||
+              inv.invoiceType === 'SALES_CREDIT' ||
+              inv.invoiceType === 'SALES_MAUND' ||
+              inv.invoiceType === 'PURCHASE_RETURN'
+            ) {
               debit = Number(inv.netTotal || 0);
-            } else if (inv.invoiceType === 'SALES_RETURN' || inv.invoiceType === 'PURCHASE_CASH' || inv.invoiceType === 'PURCHASE_CREDIT') {
+            } else if (
+              inv.invoiceType === 'SALES_RETURN' ||
+              inv.invoiceType === 'PURCHASE_CASH' ||
+              inv.invoiceType === 'PURCHASE_CREDIT' ||
+              inv.invoiceType === 'PURCHASE_MAUND'
+            ) {
               credit = Number(inv.netTotal || 0);
             }
             openingBalance += debit - credit;
@@ -114,12 +124,18 @@ export const LedgersComponent: React.FC = () => {
             if (inv.invoiceType === 'SALES_CASH' || inv.invoiceType === 'SALES_CREDIT') {
               debit = Number(inv.netTotal || 0);
               desc = `Sales Invoice #${inv.invoiceNo}`;
+            } else if (inv.invoiceType === 'SALES_MAUND') {
+              debit = Number(inv.netTotal || 0);
+              desc = `Sales (Maund) #${inv.invoiceNo}`;
             } else if (inv.invoiceType === 'SALES_RETURN') {
               credit = Number(inv.netTotal || 0);
               desc = `Sales Return #${inv.invoiceNo}`;
             } else if (inv.invoiceType === 'PURCHASE_CASH' || inv.invoiceType === 'PURCHASE_CREDIT') {
               credit = Number(inv.netTotal || 0);
               desc = `Purchase Invoice #${inv.invoiceNo}`;
+            } else if (inv.invoiceType === 'PURCHASE_MAUND') {
+              credit = Number(inv.netTotal || 0);
+              desc = `Purchase (Maund) #${inv.invoiceNo}`;
             } else if (inv.invoiceType === 'PURCHASE_RETURN') {
               debit = Number(inv.netTotal || 0);
               desc = `Purchase Return #${inv.invoiceNo}`;
@@ -440,6 +456,30 @@ export const LedgersComponent: React.FC = () => {
             <p className="text-xs text-gray-500 font-mono">Period: {dateFrom} to {dateTo}</p>
           </div>
         </div>
+
+        {ledgerType === 'account' && (() => {
+          const acc = accounts.find(a => a.id === selectedAccountId);
+          return (
+            <div className="bg-emerald-50/60 border border-emerald-200 rounded-lg p-3.5 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs shadow-xs">
+              <div>
+                <span className="text-gray-500 block font-semibold uppercase text-[10px]">Account Code</span>
+                <span className="font-mono font-bold text-emerald-900 text-sm">{acc?.code || 'N/A'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 block font-semibold uppercase text-[10px]">Account Name</span>
+                <span className="font-bold text-gray-900 text-sm">{acc?.name || 'N/A'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 block font-semibold uppercase text-[10px]">Address</span>
+                <span className="font-medium text-gray-800">{acc?.address || 'N/A'}</span>
+              </div>
+              <div>
+                <span className="text-gray-500 block font-semibold uppercase text-[10px]">Phone / Mobile</span>
+                <span className="font-mono font-medium text-gray-800">{acc?.phone || 'N/A'}</span>
+              </div>
+            </div>
+          );
+        })()}
 
         {ledgerType === 'account' ? (
           <div className="overflow-x-auto">

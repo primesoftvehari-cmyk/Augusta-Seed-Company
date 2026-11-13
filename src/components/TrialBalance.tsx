@@ -36,6 +36,7 @@ export const TrialBalanceComponent: React.FC = () => {
 
   const calculateTrialBalance = (accs: Account[], vocs: Voucher[], invs: Invoice[]) => {
     const groups: { [key: string]: any[] } = {
+      'Cash/Banks': [],
       Assets: [],
       Liabilities: [],
       Equity: [],

@@ -82,16 +82,6 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onOpenMySQLModal }
     }
   };
 
-  const fillDefaultAdmin = () => {
-    setUsernameOrEmail('admin');
-    setPassword('admin123');
-  };
-
-  const fillDefaultAccountant = () => {
-    setUsernameOrEmail('accountant');
-    setPassword('nasir123');
-  };
-
   return (
     <div className="min-h-screen bg-radial-[at_top_left] from-emerald-950 via-emerald-900 to-gray-950 flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-emerald-800/40">
@@ -183,24 +173,8 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess, onOpenMySQLModal }
             </button>
           </form>
 
-          <div className="mt-6 pt-4 border-t border-gray-100 flex flex-col space-y-2 text-xs">
-            <div className="flex items-center justify-between">
-              <button
-                type="button"
-                onClick={fillDefaultAdmin}
-                className="text-emerald-700 hover:underline font-semibold cursor-pointer"
-              >
-                Quick Fill Admin (admin)
-              </button>
-              <button
-                type="button"
-                onClick={fillDefaultAccountant}
-                className="text-emerald-700 hover:underline font-semibold cursor-pointer"
-              >
-                Quick Fill Accountant (accountant)
-              </button>
-            </div>
-            <p className="text-[11px] text-gray-400 text-center pt-1">
+          <div className="mt-6 pt-4 border-t border-gray-100 text-center">
+            <p className="text-[11px] text-gray-400">
               StackCP MySQL Host: <span className="font-mono text-emerald-800">mysql.gb.stackcp.com:45713</span>
             </p>
           </div>

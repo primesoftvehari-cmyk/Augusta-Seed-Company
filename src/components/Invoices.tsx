@@ -30,6 +30,7 @@ export const InvoicesComponent: React.FC<{
   const [salesStaff, setSalesStaff] = useState('');
   const [territory, setTerritory] = useState('');
   const [reason, setReason] = useState('');
+  const [description, setDescription] = useState('');
   const [remarks, setRemarks] = useState('');
 
   const createEmptyItem = (): InvoiceItem => ({
@@ -64,6 +65,38 @@ export const InvoicesComponent: React.FC<{
     }
   }, [initialInvoiceNo, invoices]);
 
+  const getNextInvoiceNo = (allInvs: Invoice[], type: InvoiceType) => {
+    let prefix = 'SAL';
+    if (type.includes('PURCHASE')) prefix = 'PUR';
+    if (type === 'SALES_RETURN') prefix = 'SRT';
+    if (type === 'PURCHASE_RETURN') prefix = 'PRT';
+
+    let maxNum = 1000;
+    for (const inv of allInvs) {
+      if (!inv.invoiceNo) continue;
+      const invNoUpper = inv.invoiceNo.trim().toUpperCase();
+      if (invNoUpper.startsWith(prefix) || invNoUpper.includes(prefix)) {
+        const parts = inv.invoiceNo.split('-');
+        if (parts.length >= 2) {
+          const num = parseInt(parts[parts.length - 1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        } else {
+          const match = inv.invoiceNo.match(/\d+$/);
+          if (match) {
+            const num = parseInt(match[0], 10);
+            if (!isNaN(num) && num > maxNum) {
+              maxNum = num;
+            }
+          }
+        }
+      }
+    }
+
+    return `${prefix}-${maxNum + 1}`;
+  };
+
   const loadData = async () => {
     const invs = await db.getInvoices();
     const prods = await db.getProducts();
@@ -79,8 +112,9 @@ export const InvoicesComponent: React.FC<{
     setAccountName('');
     setAccountSearch('');
     setProductSearches({});
-    setInvoiceNo(`${activeTab.substring(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`);
+    setInvoiceNo(getNextInvoiceNo(invs, activeTab));
     setItems([createEmptyItem()]);
+    setDescription('');
   };
 
   const handleEdit = (inv: Invoice) => {
@@ -111,18 +145,20 @@ export const InvoicesComponent: React.FC<{
         };
       })
     );
+    setDescription(inv.description || inv.remarks || '');
     setRemarks(inv.remarks || '');
   };
 
   const handleCancelEdit = () => {
     setEditingInvoice(null);
-    setInvoiceNo(`${activeTab.substring(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`);
+    setInvoiceNo(getNextInvoiceNo(invoices, activeTab));
     setDate(new Date().toISOString().split('T')[0]);
     setAccountName('');
     setSalesStaff('');
     setTerritory('');
     setReason('');
     setItems([createEmptyItem()]);
+    setDescription('');
     setRemarks('');
   };
 
@@ -224,7 +260,8 @@ export const InvoicesComponent: React.FC<{
       grossTotal,
       discountTotal,
       netTotal,
-      remarks,
+      description,
+      remarks: description || remarks,
       createdBy: currentUser.fullName,
       createdAt: editingInvoice ? editingInvoice.createdAt : new Date().toISOString()
     };
@@ -315,13 +352,14 @@ export const InvoicesComponent: React.FC<{
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Invoice No</label>
+            <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Manual Invoice No</label>
             <input
               type="text"
               required
               value={invoiceNo}
               onChange={e => setInvoiceNo(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-hidden font-mono font-bold"
+              placeholder="Enter manual invoice no..."
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-hidden font-mono font-bold bg-amber-50/50"
             />
           </div>
           <div>
@@ -398,6 +436,17 @@ export const InvoicesComponent: React.FC<{
               </select>
             </div>
           )}
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold uppercase text-gray-600 mb-1">Invoice Description / Remarks</label>
+          <input
+            type="text"
+            placeholder="Enter invoice description (will show in sales & purchase reports)..."
+            value={description}
+            onChange={e => setDescription(e.target.value)}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-emerald-600 focus:outline-hidden"
+          />
         </div>
 
         <div className="space-y-4">
@@ -760,9 +809,12 @@ export const InvoicesComponent: React.FC<{
               {/* Meta Grid */}
               {(() => {
                 const matchedAccount = accounts.find(
-                  acc => acc.name === selectedPrintInvoice.accountName || acc.id === selectedPrintInvoice.accountName
+                  acc => 
+                    acc.name.trim().toLowerCase() === selectedPrintInvoice.accountName.trim().toLowerCase() ||
+                    acc.id === selectedPrintInvoice.accountName
                 );
-                const accountPhone = matchedAccount?.phone || '03023576036';
+                const accountPhone = matchedAccount?.phone || 'N/A';
+                const accountAddress = matchedAccount?.address || '';
                 const accountDescription = matchedAccount?.description || '';
 
                 return (
@@ -775,6 +827,9 @@ export const InvoicesComponent: React.FC<{
                       <p className="text-gray-700 font-medium">
                         Contact #: <span className="font-mono">{accountPhone}</span>
                       </p>
+                      {accountAddress && (
+                        <p className="text-gray-700 text-xs mt-0.5">Address: {accountAddress}</p>
+                      )}
                       {accountDescription && (
                         <p className="text-gray-600 text-xs italic mt-0.5">Remarks: {accountDescription}</p>
                       )}
@@ -798,6 +853,13 @@ export const InvoicesComponent: React.FC<{
                   </div>
                 );
               })()}
+
+              {selectedPrintInvoice.description && (
+                <div className="bg-emerald-50/50 border border-emerald-200 p-3 rounded-lg text-xs">
+                  <span className="font-bold text-emerald-900 uppercase">Invoice Description: </span>
+                  <span className="text-gray-800 font-medium">{selectedPrintInvoice.description}</span>
+                </div>
+              )}
 
               {/* Items Table */}
               <table className="w-full border-collapse border border-gray-400 text-xs">

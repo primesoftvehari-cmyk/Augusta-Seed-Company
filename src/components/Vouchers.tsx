@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../services/db';
 import { Voucher, VoucherType, Account, SalesStaff, UserProfile, VoucherLine } from '../types';
-import { Trash2, Save, Printer, Edit } from 'lucide-react';
+import { Trash2, Save, Printer, Edit, X } from 'lucide-react';
 
 export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType?: VoucherType }> = ({
   currentUser,
@@ -25,6 +25,7 @@ export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType
   const [creditSearch, setCreditSearch] = useState('');
   const [amount, setAmount] = useState<number>(0);
   const [editingVoucher, setEditingVoucher] = useState<Voucher | null>(null);
+  const [selectedPrintVoucher, setSelectedPrintVoucher] = useState<Voucher | null>(null);
 
   // Refs for auto-focus workflow
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -74,7 +75,20 @@ export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType
     setVouchers(list.filter(v => v.voucherType === activeTab));
     setAccounts(accs);
     setStaffList(staff);
-    setVoucherNo(`${activeTab.substring(0, 3)}-${Math.floor(1000 + Math.random() * 9000)}`);
+
+    // Sequential Numbering
+    const typePrefix = activeTab === 'CASH_PAYMENT' ? 'CP' : activeTab === 'CASH_RECEIPT' ? 'CR' : 'JV';
+    const existing = list.filter(v => v.voucherType === activeTab);
+    let maxNum = 1000;
+    existing.forEach(v => {
+      const parts = v.voucherNo.split('-');
+      if (parts.length === 2) {
+        const num = parseInt(parts[1], 10);
+        if (!isNaN(num) && num > maxNum) maxNum = num;
+      }
+    });
+    setVoucherNo(`${typePrefix}-${maxNum + 1}`);
+
     setNarration('');
     setDebitNarration('');
     setCreditNarration('');
@@ -209,10 +223,15 @@ export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType
       createdAt: editingVoucher ? editingVoucher.createdAt : new Date().toISOString()
     };
 
-    await db.saveVoucher(newVoucher);
-    alert(editingVoucher ? 'Voucher updated successfully!' : 'Voucher posted successfully!');
-    loadData();
-    dateInputRef.current?.focus();
+    try {
+      await db.saveVoucher(newVoucher);
+      alert(editingVoucher ? 'Voucher updated successfully!' : 'Voucher posted successfully!');
+      loadData();
+      dateInputRef.current?.focus();
+    } catch (error: any) {
+      alert(error.message || 'Failed to save voucher.');
+      console.error(error);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -221,8 +240,13 @@ export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType
       return;
     }
     if (confirm('Are you sure you want to delete this voucher?')) {
-      await db.deleteVoucher(id);
-      loadData();
+      try {
+        await db.deleteVoucher(id);
+        loadData();
+      } catch (error: any) {
+        alert(error.message || 'Failed to delete voucher.');
+        console.error(error);
+      }
     }
   };
 
@@ -521,7 +545,7 @@ export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType
                     <td className="py-3 px-4 text-xs text-gray-500">{v.createdBy}</td>
                     <td className="py-3 px-4 text-right space-x-2">
                       <button
-                        onClick={() => window.print()}
+                        onClick={() => setSelectedPrintVoucher(v)}
                         className="p-1.5 text-gray-500 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg cursor-pointer"
                         title="Print"
                       >
@@ -551,6 +575,62 @@ export const VouchersComponent: React.FC<{ currentUser: UserProfile; defaultType
           </table>
         </div>
       </div>
+      {selectedPrintVoucher && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-4xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="flex items-center justify-between px-6 py-4 bg-gray-900 text-white print:hidden">
+              <h3 className="font-bold text-lg flex items-center space-x-2">
+                <Printer className="w-5 h-5 text-emerald-400" />
+                <span>Voucher Print Preview</span>
+              </h3>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => window.print()}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center space-x-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" />
+                  <span>Print Voucher</span>
+                </button>
+                <button
+                  onClick={() => setSelectedPrintVoucher(null)}
+                  className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+            <div className="p-8 overflow-y-auto bg-white text-black font-sans space-y-6 print:p-0">
+              <h1 className="text-2xl font-black text-center uppercase tracking-wider">{selectedPrintVoucher.voucherType.replace('_', ' ')}</h1>
+              <div className="flex justify-between font-bold">
+                <p>Voucher No: {selectedPrintVoucher.voucherNo}</p>
+                <p>Date: {selectedPrintVoucher.date}</p>
+              </div>
+              <table className="w-full border-collapse border border-gray-400 text-sm">
+                <thead>
+                  <tr className="bg-gray-100">
+                    <th className="border border-gray-400 p-2">Account</th>
+                    <th className="border border-gray-400 p-2">Description</th>
+                    <th className="border border-gray-400 p-2 text-right">Debit</th>
+                    <th className="border border-gray-400 p-2 text-right">Credit</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selectedPrintVoucher.lines.map((line, idx) => (
+                    <tr key={idx}>
+                      <td className="border border-gray-400 p-2">{line.accountName}</td>
+                      <td className="border border-gray-400 p-2">{line.description}</td>
+                      <td className="border border-gray-400 p-2 text-right">{line.debit.toLocaleString()}</td>
+                      <td className="border border-gray-400 p-2 text-right">{line.credit.toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="text-right font-bold text-lg">Total Amount: {selectedPrintVoucher.totalAmount.toLocaleString()}</div>
+              <div className="mt-4 border-t pt-4 text-sm font-medium">Narration: {selectedPrintVoucher.narration}</div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
